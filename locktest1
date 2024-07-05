@@ -1,0 +1,157 @@
+-- Create the ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AduriteGUI"
+screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Create the Frame
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 300, 0, 400)
+frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+-- Create the Title Label (for dragging)
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "TitleLabel"
+titleLabel.Size = UDim2.new(1, 0, 0, 50)
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+titleLabel.BorderSizePixel = 0
+titleLabel.Text = "Adurite"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextScaled = true
+titleLabel.Parent = frame
+
+-- Create the Camlock Toggle Button
+local camlockButton = Instance.new("TextButton")
+camlockButton.Name = "CamlockButton"
+camlockButton.Size = UDim2.new(1, 0, 0, 50)
+camlockButton.Position = UDim2.new(0, 0, 0, 60)
+camlockButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+camlockButton.BorderSizePixel = 0
+camlockButton.Text = "Camlock: OFF"
+camlockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+camlockButton.TextScaled = true
+camlockButton.Parent = frame
+
+-- Variables
+local dragging = false
+local dragInput, dragStart, startPos
+local camlockEnabled = false
+local tracking = false
+local trackedPlayer = nil
+
+-- Function to update the dragging position
+local function update(input)
+    local delta = input.Position - dragStart
+    frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+-- Dragging functions
+titleLabel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+titleLabel.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+-- Show/Hide GUI on Right Shift press
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.RightShift and not gameProcessed then
+        screenGui.Enabled = not screenGui.Enabled
+    end
+end)
+
+-- Function to get the player closest to the mouse cursor
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local mouse = game.Players.LocalPlayer:GetMouse()
+
+    for _, otherPlayer in pairs(game.Players:GetPlayers()) do
+        if otherPlayer ~= game.Players.LocalPlayer then
+            local character = otherPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local screenPoint = workspace.CurrentCamera:WorldToScreenPoint(character.HumanoidRootPart.Position)
+                local distance = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
+                if distance < shortestDistance then
+                    closestPlayer = otherPlayer
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+-- Function to start tracking the target player's coordinates
+local function startTracking(target)
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        tracking = true
+        trackedPlayer = target
+        print("Started tracking " .. target.Name)
+
+        target.Character.Humanoid.Died:Connect(function()
+            tracking = false
+            trackedPlayer = nil
+            print("Stopped tracking (player died)")
+        end)
+
+        game:GetService("RunService").RenderStepped:Connect(function()
+            if tracking and trackedPlayer and trackedPlayer.Character and trackedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local position = trackedPlayer.Character.HumanoidRootPart.Position
+                print("Tracking " .. trackedPlayer.Name .. ": X: " .. position.X .. ", Y: " .. position.Y .. ", Z: " .. position.Z)
+            else
+                tracking = false
+                trackedPlayer = nil
+                print("Stopped tracking")
+            end
+        end)
+    end
+end
+
+-- Toggle Camlock
+camlockButton.MouseButton1Click:Connect(function()
+    camlockEnabled = not camlockEnabled
+    camlockButton.Text = camlockEnabled and "Camlock: ON" or "Camlock: OFF"
+end)
+
+-- Start/Stop tracking on 'C' key press
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.C and not gameProcessed then
+        if tracking then
+            tracking = false
+            trackedPlayer = nil
+            print("Stopped tracking")
+        elseif camlockEnabled then
+            local closestPlayer = getClosestPlayer()
+            if closestPlayer then
+                startTracking(closestPlayer)
+            else
+                print("No player found to track")
+            end
+        end
+    end
+end)
